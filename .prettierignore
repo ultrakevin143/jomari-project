@@ -1,0 +1,6 @@
+node_modules
+.next
+dist
+.local
+package-lock.json
+.impeccable/review

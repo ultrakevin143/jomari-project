@@ -1,0 +1,575 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Classification {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+enum RunStatus {
+  RUNNING
+  SUCCEEDED
+  PARTIAL
+  FAILED
+}
+enum Severity {
+  INFO
+  WARNING
+  ERROR
+}
+enum Remediation {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+enum CollectionStatus {
+  COMPLETED
+  MISSED
+  IN_PROGRESS
+  SCHEDULED
+}
+enum VehicleStatus {
+  AVAILABLE
+  ON_ROUTE
+  MAINTENANCE
+}
+enum RequestStatus {
+  OPEN
+  ASSIGNED
+  RESOLVED
+  CLOSED
+}
+enum WorkOrderStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  timezone  String   @default("Asia/Manila")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     User[]
+  roles     Role[]
+  sources   SourceSystem[]
+  domains   DataDomain[]
+}
+model User {
+  id             String @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String @unique
+  name           String
+  passwordHash   String
+  roleId         String
+  role           Role @relation(fields: [roleId], references: [id])
+  active         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  sessions       Session[]
+  recoveryTokens PasswordRecovery[]
+  securityQuestion SecurityQuestion?
+  @@index([organizationId])
+}
+model Role {
+  id             String @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  permissions    Permission[]
+  users          User[]
+  @@unique([organizationId, code])
+}
+model Permission {
+  id     String @id @default(uuid())
+  roleId String
+  role   Role @relation(fields: [roleId], references: [id])
+  code   String
+  @@unique([roleId, code])
+}
+model Session {
+  id        String @id @default(uuid())
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+}
+model PasswordRecovery {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  @@index([userId])
+  @@index([expiresAt])
+}
+model SecurityQuestion {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question   String
+  answerHash String
+  updatedAt  DateTime @updatedAt
+}
+model DataDomain {
+  id             String @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  description    String
+  owner          String
+  steward        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  assets         DataAsset[]
+  @@unique([organizationId, code])
+}
+model DataAsset {
+  id             String @id @default(uuid())
+  organizationId String
+  domainId       String
+  domain         DataDomain @relation(fields: [domainId], references: [id])
+  sourceSystemId String
+  sourceSystem   SourceSystem @relation(fields: [sourceSystemId], references: [id])
+  name           String
+  entity         String
+  owner          String
+  steward        String
+  classification Classification
+  containsPii    Boolean @default(false)
+  retentionDays  Int
+  policy         String
+  version        Int @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, entity])
+  @@index([organizationId, domainId])
+}
+model SourceSystem {
+  id             String @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  code           String
+  name           String
+  entity         String
+  domain         String
+  method         String
+  freshnessHours Int @default(24)
+  lastSuccessAt  DateTime?
+  cursor         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  connections    IntegrationConnection[]
+  runs           IntegrationRun[]
+  assets         DataAsset[]
+  @@unique([organizationId, code])
+  @@index([organizationId, lastSuccessAt])
+}
+model IntegrationConnection {
+  id             String @id @default(uuid())
+  organizationId String
+  sourceSystemId String
+  sourceSystem   SourceSystem @relation(fields: [sourceSystemId], references: [id])
+  adapter        String
+  enabled        Boolean @default(true)
+  cursor         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([sourceSystemId, adapter])
+}
+model IntegrationRun {
+  id             String @id @default(uuid())
+  organizationId String
+  sourceSystemId String
+  sourceSystem   SourceSystem @relation(fields: [sourceSystemId], references: [id])
+  idempotencyKey String
+  payloadHash    String
+  method         String
+  entity         String
+  status         RunStatus @default(RUNNING)
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  totalRecords   Int @default(0)
+  processed      Int @default(0)
+  failed         Int @default(0)
+  skipped        Int @default(0)
+  initiatedBy    String
+  records        RawImportRecord[]
+  errors         IntegrationRecordError[]
+  @@unique([organizationId, sourceSystemId, idempotencyKey])
+  @@index([organizationId, startedAt])
+}
+model IntegrationLock {
+  sourceSystemId String @id
+  organizationId String
+  expiresAt      DateTime
+}
+model RawImportRecord {
+  id             String @id @default(uuid())
+  organizationId String
+  runId          String
+  run            IntegrationRun @relation(fields: [runId], references: [id])
+  rowNumber      Int
+  sourceRecordId String?
+  payload        Json
+  payloadHash    String
+  status         String
+  canonicalId    String?
+  createdAt      DateTime @default(now())
+  errors         IntegrationRecordError[]
+  @@unique([runId, rowNumber])
+  @@index([organizationId, sourceRecordId])
+}
+model IntegrationRecordError {
+  id             String @id @default(uuid())
+  organizationId String
+  runId          String
+  run            IntegrationRun @relation(fields: [runId], references: [id])
+  rawRecordId    String
+  rawRecord      RawImportRecord @relation(fields: [rawRecordId], references: [id])
+  code           String
+  message        String
+  remediation    Remediation @default(OPEN)
+  attempts       Int @default(0)
+  createdAt      DateTime @default(now())
+  resolvedAt     DateTime?
+  @@index([organizationId, remediation])
+}
+model ServiceArea {
+  id             String @id @default(uuid())
+  organizationId String
+  code           String
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  routes         CollectionRoute[]
+  contracts      ServiceContract[]
+  @@unique([organizationId, code])
+}
+model CollectionRoute {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  code            String
+  name            String
+  serviceAreaId   String
+  serviceArea     ServiceArea @relation(fields: [serviceAreaId], references: [id])
+  vehicleId       String?
+  vehicle         Vehicle? @relation(fields: [vehicleId], references: [id])
+  scheduledStops  Int
+  completedStops  Int
+  missedStops     Int @default(0)
+  scheduledAt     DateTime
+  durationMinutes Int
+  status          CollectionStatus
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  stops           CollectionStop[]
+  events          CollectionEvent[]
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId, scheduledAt])
+  @@index([organizationId, status])
+}
+model CollectionStop {
+  id             String @id @default(uuid())
+  organizationId String
+  routeId        String
+  route          CollectionRoute @relation(fields: [routeId], references: [id])
+  code           String
+  location       String
+  sequence       Int
+  status         CollectionStatus
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([routeId, code])
+}
+model CollectionEvent {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  routeId         String
+  route           CollectionRoute @relation(fields: [routeId], references: [id])
+  vehicleId       String
+  vehicle         Vehicle @relation(fields: [vehicleId], references: [id])
+  occurredAt      DateTime
+  status          CollectionStatus
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId, occurredAt])
+}
+model Vehicle {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  registration    String
+  code            String
+  type            String
+  capacityKg      Float
+  mileageKm       Float
+  fuelLitres      Float
+  status          VehicleStatus
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  routes          CollectionRoute[]
+  events          CollectionEvent[]
+  telemetry       VehicleTelemetryEvent[]
+  workOrders      WorkOrder[]
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@unique([organizationId, registration])
+  @@index([organizationId, status])
+}
+model VehicleTelemetryEvent {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  vehicleId       String
+  vehicle         Vehicle @relation(fields: [vehicleId], references: [id])
+  occurredAt      DateTime
+  latitude        Float
+  longitude       Float
+  mileageKm       Float
+  fuelLitres      Float
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId, vehicleId, occurredAt])
+}
+model Facility {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  code            String
+  name            String
+  type            String
+  location        String
+  dailyCapacityKg Float
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  transactions    WeighbridgeTransaction[]
+  recovery        RecyclingRecoveryRecord[]
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@unique([organizationId, code])
+}
+model MaterialType {
+  id             String @id @default(uuid())
+  organizationId String
+  code           String
+  name           String
+  recyclable     Boolean
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  transactions   WeighbridgeTransaction[]
+  recovery       RecyclingRecoveryRecord[]
+  @@unique([organizationId, code])
+}
+model WeighbridgeTransaction {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  ticketNumber    String
+  facilityId      String
+  facility        Facility @relation(fields: [facilityId], references: [id])
+  materialTypeId  String
+  materialType    MaterialType @relation(fields: [materialTypeId], references: [id])
+  grossKg         Float
+  tareKg          Float
+  netKg           Float
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@unique([organizationId, ticketNumber])
+  @@index([organizationId, occurredAt])
+}
+model RecyclingRecoveryRecord {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  facilityId      String
+  facility        Facility @relation(fields: [facilityId], references: [id])
+  materialTypeId  String
+  materialType    MaterialType @relation(fields: [materialTypeId], references: [id])
+  receivedKg      Float
+  recoveredKg     Float
+  contaminationPct Float
+  exceptionReason String?
+  occurredAt      DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  incidents       ContaminationIncident[]
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId, occurredAt])
+}
+model ContaminationIncident {
+  id             String @id @default(uuid())
+  organizationId String
+  recoveryId     String
+  recovery       RecyclingRecoveryRecord @relation(fields: [recoveryId], references: [id])
+  category       String
+  rejectedKg     Float
+  notes          String
+  createdAt      DateTime @default(now())
+  @@index([organizationId])
+}
+model WorkOrder {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  reference       String
+  title           String
+  vehicleId       String?
+  vehicle         Vehicle? @relation(fields: [vehicleId], references: [id])
+  assignee        String
+  priority        Severity
+  status          WorkOrderStatus
+  dueAt           DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId, status])
+}
+model CitizenRequest {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  reference       String
+  category        String
+  location        String
+  citizenAlias    String
+  status          RequestStatus
+  previousStatus  RequestStatus?
+  reportedAt      DateTime
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId, status])
+}
+model ServiceContract {
+  id              String @id @default(uuid())
+  organizationId  String
+  sourceSystemId  String
+  sourceRecordId  String
+  sourceUpdatedAt DateTime
+  sourceVersion   String
+  reference       String
+  vendor          String
+  serviceAreaId   String
+  serviceArea     ServiceArea @relation(fields: [serviceAreaId], references: [id])
+  slaTargetPct    Float
+  ratePerTonne    Float
+  validUntil      DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@unique([organizationId, sourceSystemId, sourceRecordId])
+  @@index([organizationId])
+}
+model DQRule {
+  id             String @id @default(uuid())
+  organizationId String
+  code           String
+  name           String
+  domain         String
+  entity         String
+  severity       Severity
+  description    String
+  checkId        String
+  active         Boolean @default(true)
+  config         Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  results        DQResult[]
+  @@unique([organizationId, code])
+}
+model DQRun {
+  id             String @id @default(uuid())
+  organizationId String
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  status         RunStatus @default(RUNNING)
+  score          Float @default(0)
+  checked        Int @default(0)
+  failed         Int @default(0)
+  initiatedBy    String
+  results        DQResult[]
+  @@index([organizationId, startedAt])
+}
+model DQResult {
+  id             String @id @default(uuid())
+  organizationId String
+  runId          String
+  run            DQRun @relation(fields: [runId], references: [id])
+  ruleId         String
+  rule           DQRule @relation(fields: [ruleId], references: [id])
+  severity       Severity
+  checked        Int
+  failed         Int
+  passed         Boolean
+  samples        Json
+  remediation    Remediation @default(OPEN)
+  remediationNote String?
+  updatedAt      DateTime @updatedAt
+  @@unique([runId, ruleId])
+  @@index([organizationId, remediation])
+}
+model AuditEvent {
+  id             String @id @default(uuid())
+  organizationId String
+  actorId        String?
+  actorName      String
+  action         String
+  entity         String
+  entityId       String?
+  requestId      String
+  reason         String?
+  metadata       Json
+  createdAt      DateTime @default(now())
+  @@index([organizationId, createdAt])
+  @@index([organizationId, action])
+}

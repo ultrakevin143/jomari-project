@@ -1,0 +1,3 @@
+sourceRecordId,sourceUpdatedAt,registration,code,type,capacityKg,mileageKm,fuelLitres,status
+PRESENTATION-VEHICLE-001,2026-10-26T08:00:00Z,PRESENT-001,PRES-001,Rear loader,9000,1200,30,AVAILABLE
+PRESENTATION-VEHICLE-002,2026-10-26T08:00:00Z,,PRES-002,Rear loader,9000,1200,30,AVAILABLE
