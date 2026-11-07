@@ -54,7 +54,7 @@ export function authRoutes(db: PrismaClient, config: Config) {
   );
   router.post(
     "/refresh",
-    requirePermission("operations:read"),
+    requirePermission("overview:read"),
     controller.refresh,
   );
   router.post("/logout", controller.logout);

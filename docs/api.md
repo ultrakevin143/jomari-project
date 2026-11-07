@@ -19,15 +19,21 @@ Errors use:
 
 HTTP codes: 400 invalid JSON, 401 unauthenticated, 403 missing permission/origin, 404 missing or other-organization resource, 409 concurrency/idempotency/version conflict, 413 request too large, 415 invalid media type, 422 validation failure, 429 rate limit, 500 safe internal failure, 503 database unavailable. Correlation ID appears in `x-request-id`. SQL, passwords, session cookies and request bodies are not logged.
 
-| Permission                                              | Administrator | Operator | Steward | Analyst |
-| ------------------------------------------------------- | ------------- | -------- | ------- | ------- |
-| operations:read, dq:read, governance:read, reports:read | Yes           | Yes      | Yes     | Yes     |
-| operations:write (archive)                              | Yes           | No       | No      | No      |
-| integrations:read                                       | Yes           | Yes      | Yes     | No      |
-| integrations:write                                      | Yes           | Yes      | No      | No      |
-| dq:write                                                | Yes           | Yes      | Yes     | No      |
-| governance:write                                        | Yes           | No       | Yes     | No      |
-| audit:read                                              | Yes           | Yes      | Yes     | No      |
+| Permission                                   | Administrator | Operator | Steward | Analyst |
+| -------------------------------------------- | ------------- | -------- | ------- | ------- |
+| overview:read (derived from operations:read) | Yes           | Yes      | Yes     | Yes     |
+| operations:read                              | Yes           | Yes      | No      | Yes     |
+| dq:read                                      | Yes           | Yes      | Yes     | No      |
+| governance:read                              | Yes           | No       | Yes     | No      |
+| reports:read                                 | Yes           | No       | No      | Yes     |
+| operations:write (archive)                   | Yes           | No       | No      | No      |
+| integrations:read                            | Yes           | Yes      | No      | No      |
+| integrations:write                           | Yes           | Yes      | No      | No      |
+| dq:write                                     | Yes           | Yes      | Yes     | No      |
+| governance:write                             | Yes           | No       | Yes     | No      |
+| audit:read                                   | Yes           | No       | Yes     | No      |
+
+These are the maximum permissions for each role. Database grants can further restrict them. The server applies this policy to both login responses and authenticated API requests. Existing database records do not need to be rewritten.
 
 Every query takes organization identity from the verified session, never from the caller. Canonical foreign references are checked by organization in the API and database triggers. Citizen identity aliases are omitted from operational responses. Raw quarantine is available only to integration-reading roles, which are trusted to handle classified source payloads.
 

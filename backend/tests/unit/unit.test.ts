@@ -13,6 +13,36 @@ import { ruleDefinitions } from "../../src/modules/quality/quality.rules.js";
 import { csv } from "../../src/shared/csv.js";
 import { stableHash } from "../../src/shared/hash.js";
 import { hashPassword, verifyPassword } from "../../src/shared/security.js";
+import { effectivePermissions } from "../../src/shared/role-access.js";
+
+test("role access limits database grants and keeps overview available", () => {
+  const grants = [
+    "operations:read",
+    "integrations:read",
+    "integrations:write",
+    "dq:read",
+    "dq:write",
+    "governance:read",
+    "governance:write",
+    "audit:read",
+    "reports:read",
+  ];
+  const operator = effectivePermissions("operator", grants);
+  const steward = effectivePermissions("steward", grants);
+  const analyst = effectivePermissions("analyst", grants);
+  assert.equal(operator.includes("integrations:write"), true);
+  assert.equal(operator.includes("governance:read"), false);
+  assert.equal(steward.includes("governance:write"), true);
+  assert.equal(steward.includes("operations:read"), false);
+  assert.equal(steward.includes("overview:read"), true);
+  assert.equal(analyst.includes("dq:read"), false);
+  assert.equal(analyst.includes("reports:read"), true);
+  assert.deepEqual(effectivePermissions("unknown", grants), []);
+  assert.equal(
+    effectivePermissions("operator", []).includes("integrations:write"),
+    false,
+  );
+});
 
 test("remote and Neon URLs are blocked by default, before a connection is created", () => {
   assert.throws(

@@ -16,7 +16,7 @@ export const navigation = [
     href: "/overview",
     title: "Overview",
     icon: LayoutDashboard,
-    permission: "operations:read",
+    permission: "overview:read",
   },
   {
     href: "/operations/routes",

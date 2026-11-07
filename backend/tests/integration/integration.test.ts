@@ -28,6 +28,7 @@ const db = new PrismaClient(),
   admin = request.agent(app),
   analyst = request.agent(app),
   operator = request.agent(app),
+  steward = request.agent(app),
   password = process.env.SEED_PASSWORD!;
 before(async () => {
   await seed(db, password);
@@ -35,6 +36,7 @@ before(async () => {
     [admin, "admin"],
     [analyst, "analyst"],
     [operator, "operator"],
+    [steward, "steward"],
   ] as const)
     await agent
       .post("/auth/login")
@@ -47,7 +49,8 @@ after(async () => {
 test("school quality trends include completed runs with findings, exclude execution failures and weight observations", async () => {
   await request(app).get("/insights/quality-trends").expect(401);
   await admin.get("/insights/quality-trends?limit=99").expect(422);
-  const trends = (await analyst.get("/insights/quality-trends").expect(200))
+  await analyst.get("/insights/quality-trends").expect(403);
+  const trends = (await steward.get("/insights/quality-trends").expect(200))
     .body.data;
   assert.ok(trends.runs.length > 0);
   for (const run of trends.runs) {
@@ -70,6 +73,16 @@ test("school quality trends include completed runs with findings, exclude execut
   ).body.data;
   assert.equal(snapshot.id, selected.id);
   await admin.get("/dq/scorecards?runId=not-an-id").expect(422);
+});
+test("role page APIs enforce the agreed access matrix", async () => {
+  await operator.get("/integrations/sources").expect(200);
+  await operator.get("/governance/assets").expect(403);
+  await steward.get("/integrations/sources").expect(403);
+  await steward.get("/operations/routes").expect(403);
+  await steward.get("/overview").expect(200);
+  await analyst.get("/dq/rules").expect(403);
+  await analyst.get("/integrations/sources").expect(403);
+  await analyst.get("/operations/routes").expect(200);
 });
 test("collection reliability reports scoped counters, overdue routes and absent event evidence", async () => {
   await request(app).get("/insights/collection-reliability").expect(401);

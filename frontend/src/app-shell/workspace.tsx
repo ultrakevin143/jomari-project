@@ -66,12 +66,16 @@ export function WorkspaceContent() {
       />
     );
   const user = data.data,
-    section = pathname.split("/")[1] || "overview";
+    requestedSection = pathname.split("/")[1],
+    section =
+      !requestedSection || requestedSection === "login"
+        ? "overview"
+        : requestedSection;
   const active = navigation.find((n) => n.href.split("/")[1] === section);
   const allowed = active
     ? user.permissions.includes(active.permission) &&
       (!active.adminOnly || user.roleCode === "admin")
-    : section === "login";
+    : false;
   const sidebar = (
     <>
       <div className="brand">

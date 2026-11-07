@@ -5,6 +5,7 @@ import { type RequestHandler } from "express";
 import { ApiError } from "../shared/errors.js";
 import { identity } from "../shared/request-context.js";
 import { tokenHash } from "../shared/security.js";
+import { effectivePermissions } from "../shared/role-access.js";
 
 export function authentication(db: PrismaClient): RequestHandler {
   return async (req, _res, next) => {
@@ -26,7 +27,10 @@ export function authentication(db: PrismaClient): RequestHandler {
           email: user.email,
           role: user.role.name,
           roleCode: user.role.code,
-          permissions: user.role.permissions.map((p) => p.code),
+          permissions: effectivePermissions(
+            user.role.code,
+            user.role.permissions.map((p) => p.code),
+          ),
           sessionId: session.id,
         };
       }

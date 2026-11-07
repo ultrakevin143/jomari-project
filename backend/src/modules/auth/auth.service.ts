@@ -18,6 +18,7 @@ import {
   type ServiceInput,
 } from "../../shared/service-context.js";
 import { loginSchema } from "./auth.schemas.js";
+import { effectivePermissions } from "../../shared/role-access.js";
 export function publicProfile(value: Identity | undefined) {
   const { sessionId: _sessionId, ...user } = requireIdentity(value);
   return user;
@@ -86,7 +87,10 @@ export function createAuthService(db: PrismaClient, config: Config) {
           role: user.role.name,
           roleCode: user.role.code,
           organizationId: user.organizationId,
-          permissions: user.role.permissions.map((p) => p.code),
+          permissions: effectivePermissions(
+            user.role.code,
+            user.role.permissions.map((p) => p.code),
+          ),
         },
       },
       token,
