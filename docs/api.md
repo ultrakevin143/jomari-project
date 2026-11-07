@@ -35,6 +35,8 @@ HTTP codes: 400 invalid JSON, 401 unauthenticated, 403 missing permission/origin
 
 These are the maximum permissions for each role. Database grants can further restrict them. The server applies this policy to both login responses and authenticated API requests. Existing database records do not need to be rewritten.
 
+The shared overview is scoped by permission: operational details require operations access, source status requires integration access, and quality scores require data quality access. Cached overview responses are separated by the effective permission set.
+
 Every query takes organization identity from the verified session, never from the caller. Canonical foreign references are checked by organization in the API and database triggers. Citizen identity aliases are omitted from operational responses. Raw quarantine is available only to integration-reading roles, which are trusted to handle classified source payloads.
 
 ## Import formats

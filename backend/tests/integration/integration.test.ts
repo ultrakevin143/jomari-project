@@ -79,7 +79,14 @@ test("role page APIs enforce the agreed access matrix", async () => {
   await operator.get("/governance/assets").expect(403);
   await steward.get("/integrations/sources").expect(403);
   await steward.get("/operations/routes").expect(403);
-  await steward.get("/overview").expect(200);
+  const stewardOverview = (await steward.get("/overview").expect(200)).body
+    .data;
+  assert.equal(stewardOverview.totals, undefined);
+  assert.equal(stewardOverview.sources, undefined);
+  const analystOverview = (await analyst.get("/overview").expect(200)).body
+    .data;
+  assert.deepEqual(analystOverview.sources, []);
+  assert.equal(analystOverview.quality, null);
   await analyst.get("/dq/rules").expect(403);
   await analyst.get("/integrations/sources").expect(403);
   await analyst.get("/operations/routes").expect(200);

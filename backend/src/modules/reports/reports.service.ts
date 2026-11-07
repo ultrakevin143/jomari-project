@@ -71,9 +71,10 @@ export function createReportsService(db: PrismaClient, demoMode: boolean) {
     requestInput: ServiceInput,
     requestContext: ServiceContext,
   ) => {
-    const organizationId = requireIdentity(requestContext.user).organizationId;
+    const user = requireIdentity(requestContext.user),
+      organizationId = user.organizationId;
     const parsed = dateQuery.parse(requestInput.query),
-      key = `${organizationId}:${parsed.from ?? ""}:${parsed.to ?? ""}`;
+      key = `${organizationId}:${[...user.permissions].sort().join(",")}:${parsed.from ?? ""}:${parsed.to ?? ""}`;
     const cached = overviewCache.get(key);
     if (cached && cached.until > Date.now()) return { data: cached.data };
     const period = await reportingPeriod(
@@ -150,7 +151,10 @@ export function createReportsService(db: PrismaClient, demoMode: boolean) {
       demoMode,
       totals: report.totals,
       series: [...series.values()],
-      sources: sources.map((s) => ({
+      sources: (user.permissions.includes("integrations:read")
+        ? sources
+        : []
+      ).map((s) => ({
         id: s.id,
         name: s.name,
         code: s.code,
@@ -163,16 +167,17 @@ export function createReportsService(db: PrismaClient, demoMode: boolean) {
           Date.now() - s.lastSuccessAt.getTime() > s.freshnessHours * 3600000,
         lastRun: s.runs[0] ?? null,
       })),
-      quality: quality
-        ? {
-            id: quality.id,
-            score: quality.score,
-            checked: quality.checked,
-            failed: quality.failed,
-            finishedAt: quality.finishedAt,
-            domains: domainScores(quality.results),
-          }
-        : null,
+      quality:
+        quality && user.permissions.includes("dq:read")
+          ? {
+              id: quality.id,
+              score: quality.score,
+              checked: quality.checked,
+              failed: quality.failed,
+              finishedAt: quality.finishedAt,
+              domains: domainScores(quality.results),
+            }
+          : null,
       fleet: vehicles.map((v) => ({ status: v.status, count: v._count })),
       openWorkOrders,
       openRequests,
@@ -182,9 +187,17 @@ export function createReportsService(db: PrismaClient, demoMode: boolean) {
         .slice(0, 8),
       generatedAt: new Date(),
     };
+    const scoped = user.permissions.includes("operations:read")
+      ? data
+      : {
+          organization: data.organization,
+          period: data.period,
+          demoMode: data.demoMode,
+          quality: data.quality,
+        };
     if (overviewCache.size > 200) overviewCache.clear();
-    overviewCache.set(key, { until: Date.now() + 60000, data });
-    return { data };
+    overviewCache.set(key, { until: Date.now() + 60000, data: scoped });
+    return { data: scoped };
   };
   const getReportsReport = async (
     requestInput: ServiceInput,

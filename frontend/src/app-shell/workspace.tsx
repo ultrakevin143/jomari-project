@@ -235,7 +235,7 @@ export function WorkspaceContent() {
           ) : (
             <>
               {(section === "overview" || section === "login") && (
-                <OverviewView />
+                <OverviewView user={user} />
               )}
               {section === "operations" && (
                 <OperationsView

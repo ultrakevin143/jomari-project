@@ -2,7 +2,7 @@
 
 import { CollectionChart } from "@/features/overview/collection-chart";
 import { type Overview } from "@/features/overview/types";
-import { type Envelope } from "@/shared/api/contracts";
+import { type Envelope, type User } from "@/shared/api/contracts";
 import { PageHeading, QueryError } from "@/shared/data-display/index";
 import { dateTime, number } from "@/shared/lib/utils";
 import {
@@ -32,7 +32,7 @@ import Link from "next/link";
 import { useState } from "react";
 import useSWR from "swr";
 
-export function OverviewView() {
+export function OverviewView({ user }: { user: User }) {
   const [query, setQuery] = useState("");
   const { data, error, isLoading, mutate, isValidating } = useSWR<
     Envelope<Overview>
@@ -40,8 +40,31 @@ export function OverviewView() {
   if (isLoading) return <Loading />;
   if (error) return <QueryError error={error} retry={() => void mutate()} />;
   if (!data) return null;
-  const d = data.data,
-    period = `${new Date(d.period.from + "T00:00:00Z").toLocaleDateString("en-PH", { day: "numeric", month: "short", timeZone: "UTC" })} – ${new Date(d.period.to + "T00:00:00Z").toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`;
+  const d = data.data;
+  if (!user.permissions.includes("operations:read")) {
+    return (
+      <>
+        <PageHeading
+          title="Data quality overview"
+          description={d.organization.name}
+        />
+        <Card>
+          <CardHeader>
+            <h2>Latest quality score</h2>
+          </CardHeader>
+          <p>
+            {d.quality
+              ? `${number(d.quality.score, 1)}% · ${number(d.quality.failed)} failed checks`
+              : "No completed quality run is available."}
+          </p>
+          <Link href="/quality" className="text-link">
+            Open data quality <ArrowRight size={14} />
+          </Link>
+        </Card>
+      </>
+    );
+  }
+  const period = `${new Date(d.period.from + "T00:00:00Z").toLocaleDateString("en-PH", { day: "numeric", month: "short", timeZone: "UTC" })} – ${new Date(d.period.to + "T00:00:00Z").toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}`;
   const fleetTotal = d.fleet.reduce((n, v) => n + v.count, 0),
     onRoute = d.fleet.find((v) => v.status === "ON_ROUTE")?.count ?? 0;
   return (
