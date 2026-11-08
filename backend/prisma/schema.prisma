@@ -232,8 +232,22 @@ model RawImportRecord {
   canonicalId    String?
   createdAt      DateTime @default(now())
   errors         IntegrationRecordError[]
+  revisions      ImportPayloadRevision[]
   @@unique([runId, rowNumber])
   @@index([organizationId, sourceRecordId])
+}
+model ImportPayloadRevision {
+  id             String @id @default(uuid())
+  organizationId String
+  rawRecordId    String
+  rawRecord      RawImportRecord @relation(fields: [rawRecordId], references: [id], onDelete: Cascade)
+  payload        Json
+  payloadHash    String
+  changedById    String?
+  changedByName  String
+  requestId      String
+  createdAt      DateTime @default(now())
+  @@index([organizationId, rawRecordId, createdAt])
 }
 model IntegrationRecordError {
   id             String @id @default(uuid())

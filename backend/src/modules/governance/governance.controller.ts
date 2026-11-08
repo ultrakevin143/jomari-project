@@ -46,5 +46,12 @@ export function createGovernanceController(db: PrismaClient) {
     const result = await service.patchAssetsId(requestInput, requestContext);
     res.json(result);
   };
-  return { getDomains, getAssets, patchAssetsId };
+  const getRetentionPreview: RequestHandler = async (req, res) => {
+    const result = await service.getRetentionPreview(
+      { body: req.body, query: req.query, params: req.params },
+      { user: req.identity, requestId: req.requestId, audit: () => actor(req) },
+    );
+    res.json(result);
+  };
+  return { getDomains, getAssets, patchAssetsId, getRetentionPreview };
 }

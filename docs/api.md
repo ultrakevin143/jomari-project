@@ -1,5 +1,9 @@
 # API contract and permissions
 
+An authorized governance editor can use `GET /governance/assets/:id/retention-preview` to review raw import records older than that asset's configured retention period. The response is scoped to the organization, source and entity, returns a count and at most 50 records without payloads, and records an audit event. This informational preview does not delete data or decide legal eligibility for deletion; review legal holds, unresolved errors and policy before any separate action.
+
+Citizen request reads and quarantined import payload reads write metadata-only `CLASSIFIED_READ` audit events. These events omit record contents and do not imply that every possible classified read in the application has been audited.
+
 The browser uses `/api`; Express routes omit that prefix. Complete OpenAPI 3.1: `/api/openapi.json`. Documentation landing: `/api/docs`. Sessions use an HTTP-only, SameSite=Strict cookie; HTTPS deployments mark it Secure. POST/PATCH requests use `application/json`. Supplied browser origins must exactly match `WEB_ORIGIN`. Unknown fields are rejected on mutation bodies. IDs are UUIDs.
 
 Successful resource responses use `{ "data": ... }`. Paginated responses also include `{ "pagination": { "page": 1, "pageSize": 10, "total": 56, "pages": 6 } }`. Lists accept `page`, `pageSize` (max 100), `search`, and `sort=asc|desc`. Operational search matches source record IDs; governance search matches asset names; import search matches source names; audit search matches action/actor. Each list's sort field is documented in OpenAPI and the screen.

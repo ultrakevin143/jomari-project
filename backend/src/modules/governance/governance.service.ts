@@ -146,5 +146,60 @@ export function createGovernanceService(db: PrismaClient) {
     });
     return { data };
   };
-  return { getDomains, getAssets, patchAssetsId };
+  const getRetentionPreview = async (
+    input: ServiceInput,
+    context: ServiceContext,
+  ) => {
+    const user = requireIdentity(context.user);
+    const asset = await db.dataAsset.findFirst({
+      where: {
+        id: uuid.parse(input.params.id),
+        organizationId: user.organizationId,
+      },
+      select: {
+        id: true,
+        name: true,
+        entity: true,
+        sourceSystemId: true,
+        retentionDays: true,
+      },
+    });
+    if (!asset) throw new ApiError(404, "NOT_FOUND", "Data asset not found.");
+    const cutoff = new Date(Date.now() - asset.retentionDays * 86400000);
+    const where: Prisma.RawImportRecordWhereInput = {
+      organizationId: user.organizationId,
+      createdAt: { lt: cutoff },
+      run: {
+        organizationId: user.organizationId,
+        sourceSystemId: asset.sourceSystemId,
+        entity: asset.entity,
+      },
+    };
+    const [count, records] = await Promise.all([
+      db.rawImportRecord.count({ where }),
+      db.rawImportRecord.findMany({
+        where,
+        take: 50,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, runId: true, createdAt: true, status: true },
+      }),
+    ]);
+    await audit(db, {
+      ...serviceAudit(context.audit),
+      action: "RETENTION_PREVIEW",
+      entity: "data-asset",
+      entityId: asset.id,
+      metadata: { count, retentionDays: asset.retentionDays },
+    });
+    return {
+      data: {
+        asset: { id: asset.id, name: asset.name },
+        retentionDays: asset.retentionDays,
+        cutoff,
+        count,
+        records,
+      },
+    };
+  };
+  return { getDomains, getAssets, patchAssetsId, getRetentionPreview };
 }

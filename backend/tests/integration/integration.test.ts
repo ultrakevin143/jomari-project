@@ -46,6 +46,84 @@ before(async () => {
 after(async () => {
   await db.$disconnect();
 });
+test("retention preview is scoped, audited, non-destructive and permission checked", async () => {
+  const asset = await db.dataAsset.findFirstOrThrow({
+    where: { organizationId: DEMO_ORG },
+  });
+  const run = await db.integrationRun.create({
+    data: {
+      organizationId: DEMO_ORG,
+      sourceSystemId: asset.sourceSystemId,
+      entity: asset.entity,
+      method: "test",
+      initiatedBy: "test",
+      idempotencyKey: randomUUID(),
+      payloadHash: randomUUID(),
+    },
+  });
+  const record = await db.rawImportRecord.create({
+    data: {
+      organizationId: DEMO_ORG,
+      runId: run.id,
+      rowNumber: 1,
+      payload: { example: "not returned" },
+      payloadHash: randomUUID(),
+      status: "LOADED",
+      createdAt: new Date("2000-01-01T00:00:00Z"),
+    },
+  });
+  const path = `/governance/assets/${asset.id}/retention-preview`;
+  const unrelatedRun = await db.integrationRun.create({
+    data: {
+      organizationId: asset.organizationId,
+      sourceSystemId: asset.sourceSystemId,
+      entity: "another-entity",
+      method: "test",
+      initiatedBy: "test",
+      idempotencyKey: randomUUID(),
+      payloadHash: randomUUID(),
+    },
+  });
+  const unrelated = await db.rawImportRecord.create({
+    data: {
+      organizationId: asset.organizationId,
+      runId: unrelatedRun.id,
+      rowNumber: 1,
+      payload: {},
+      payloadHash: randomUUID(),
+      status: "LOADED",
+      createdAt: new Date("2000-01-01T00:00:00Z"),
+    },
+  });
+  await analyst.get(path).expect(403);
+  const response = (await admin.get(path).expect(200)).body.data;
+  assert.ok(
+    response.records.some((entry: { id: string }) => entry.id === record.id),
+  );
+  assert.equal(
+    response.records.some((entry: { id: string }) => entry.id === unrelated.id),
+    false,
+  );
+  assert.equal(
+    "payload" in
+      response.records.find((entry: { id: string }) => entry.id === record.id),
+    false,
+  );
+  assert.ok(await db.rawImportRecord.findUnique({ where: { id: record.id } }));
+  assert.ok(
+    await db.auditEvent.findFirst({
+      where: {
+        organizationId: DEMO_ORG,
+        action: "RETENTION_PREVIEW",
+        entityId: asset.id,
+      },
+    }),
+  );
+  await db.rawImportRecord.delete({ where: { id: record.id } });
+  await db.integrationRun.delete({ where: { id: run.id } });
+  await db.rawImportRecord.delete({ where: { id: unrelated.id } });
+  await db.integrationRun.delete({ where: { id: unrelatedRun.id } });
+});
 test("school quality trends include completed runs with findings, exclude execution failures and weight observations", async () => {
   await request(app).get("/insights/quality-trends").expect(401);
   await admin.get("/insights/quality-trends?limit=99").expect(422);
@@ -90,6 +168,22 @@ test("role page APIs enforce the agreed access matrix", async () => {
   await analyst.get("/dq/rules").expect(403);
   await analyst.get("/integrations/sources").expect(403);
   await analyst.get("/operations/routes").expect(200);
+});
+test("citizen request reads are audited without including personal data", async () => {
+  const response = await admin.get("/operations/citizen-requests").expect(200);
+  assert.ok(response.body.data.length > 0);
+  const first = response.body.data[0];
+  await admin.get(`/operations/citizen-requests/${first.id}`).expect(200);
+  const event = await db.auditEvent.findFirstOrThrow({
+    where: {
+      organizationId: DEMO_ORG,
+      action: "CLASSIFIED_READ",
+      entity: "citizen-requests",
+      entityId: first.id,
+    },
+  });
+  assert.deepEqual(event.metadata, { count: 1 });
+  await steward.get(`/operations/citizen-requests/${first.id}`).expect(403);
 });
 test("collection reliability reports scoped counters, overdue routes and absent event evidence", async () => {
   await request(app).get("/insights/collection-reliability").expect(401);
@@ -281,6 +375,17 @@ test("CSV imports are idempotent, quarantine invalid records and retry only fail
   );
   const detail = await operator.get(`/integrations/runs/${run.id}`).expect(200),
     error = detail.body.data.errors[0];
+  const importRead = await db.auditEvent.findFirstOrThrow({
+    where: {
+      organizationId: DEMO_ORG,
+      action: "CLASSIFIED_READ",
+      entity: "import-run",
+      entityId: run.id,
+    },
+  });
+  assert.deepEqual(importRead.metadata, {
+    count: detail.body.data.errors.length,
+  });
   assert.match(error.message, /registration/);
   const payload = {
     ...error.rawRecord.payload,

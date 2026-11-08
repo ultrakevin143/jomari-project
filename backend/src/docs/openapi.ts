@@ -442,6 +442,12 @@ export function openapi() {
     true,
   );
   add(
+    "/governance/assets/{id}/retention-preview",
+    "get",
+    "Governance",
+    "Audited retention candidate preview; governance write permission required",
+  );
+  add(
     "/governance/assets/{id}",
     "patch",
     "Governance",

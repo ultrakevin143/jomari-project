@@ -51,12 +51,22 @@ export function createOperationsService(db: PrismaClient) {
     requestInput: ServiceInput,
     requestContext: ServiceContext,
   ) => {
-    return await listOperations(
+    const entity = entitySchema.parse(requestInput.params.entity);
+    const result = await listOperations(
       db,
-      entitySchema.parse(requestInput.params.entity),
+      entity,
       requireIdentity(requestContext.user).organizationId,
       paging.parse(requestInput.query),
     );
+    if (entity === "citizen-requests" && result.data.length) {
+      await audit(db, {
+        ...serviceAudit(requestContext.audit),
+        action: "CLASSIFIED_READ",
+        entity,
+        metadata: { count: result.data.length },
+      });
+    }
+    return result;
   };
   const getEntityId = async (
     requestInput: ServiceInput,
@@ -135,6 +145,15 @@ export function createOperationsService(db: PrismaClient) {
     const data = await find();
     if (!data)
       throw new ApiError(404, "NOT_FOUND", "Operational record not found.");
+    if (entity === "citizen-requests") {
+      await audit(db, {
+        ...serviceAudit(requestContext.audit),
+        action: "CLASSIFIED_READ",
+        entity,
+        entityId: id,
+        metadata: { count: 1 },
+      });
+    }
     return { data };
   };
   const postEntityIdArchive = async (

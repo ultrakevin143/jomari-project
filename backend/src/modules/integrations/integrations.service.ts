@@ -420,6 +420,7 @@ export async function retryImport(
                 "DUPLICATE_SOURCE_RECORD",
                 "This source ID already has a successful row in this run. Correct the ID before retrying.",
               );
+            const payloadHash = stableHash(payload);
             const saved = await saveCanonical(
               tx,
               entitySchema.parse(run.entity),
@@ -427,14 +428,27 @@ export async function retryImport(
               {
                 organizationId: context.organizationId,
                 sourceSystemId: run.sourceSystemId,
-                sourceVersion: stableHash(payload),
+                sourceVersion: payloadHash,
               },
             );
+            if (payloadHash !== error.rawRecord.payloadHash) {
+              await tx.importPayloadRevision.create({
+                data: {
+                  organizationId: context.organizationId,
+                  rawRecordId: error.rawRecordId,
+                  payload: error.rawRecord.payload as Prisma.InputJsonObject,
+                  payloadHash: error.rawRecord.payloadHash,
+                  changedById: context.actorId,
+                  changedByName: context.actorName,
+                  requestId: context.requestId,
+                },
+              });
+            }
             await tx.rawImportRecord.update({
               where: { id: error.rawRecordId },
               data: {
                 payload: payload as Prisma.InputJsonObject,
-                payloadHash: stableHash(payload),
+                payloadHash,
                 sourceRecordId: candidateId,
                 status: saved.skipped ? "SKIPPED" : "LOADED",
                 canonicalId: saved.id,
@@ -547,6 +561,15 @@ export function createIntegrationsService(db: PrismaClient) {
       },
     });
     if (!data) throw new ApiError(404, "NOT_FOUND", "Run not found.");
+    if (data.errors.length) {
+      await audit(db, {
+        ...serviceAudit(requestContext.audit),
+        action: "CLASSIFIED_READ",
+        entity: "import-run",
+        entityId: id,
+        metadata: { count: data.errors.length },
+      });
+    }
     return { data };
   };
   const getErrors = async (

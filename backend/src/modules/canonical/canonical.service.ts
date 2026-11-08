@@ -11,6 +11,12 @@ export async function saveCanonical(
   meta: Meta,
 ) {
   const data = schemas[entity].parse(payload);
+  if (data.sourceUpdatedAt.getTime() > Date.now() + 300_000)
+    throw new ApiError(
+      422,
+      "FUTURE_TIMESTAMP",
+      "sourceUpdatedAt is more than five minutes in the future.",
+    );
   await references(db, meta.organizationId, data);
   const where = {
     organizationId: meta.organizationId,
@@ -20,11 +26,11 @@ export async function saveCanonical(
   const existing = await existingRecord(db, entity, where);
   if (existing?.sourceVersion === meta.sourceVersion)
     return { id: existing.id, skipped: true };
-  if (existing && existing.sourceUpdatedAt > data.sourceUpdatedAt)
+  if (existing && existing.sourceUpdatedAt >= data.sourceUpdatedAt)
     throw new ApiError(
       422,
       "STALE_VERSION",
-      "A newer version of this source record is already loaded.",
+      "Changed data requires a newer source timestamp.",
     );
   const unique = { organizationId_sourceSystemId_sourceRecordId: where };
   let saved: {

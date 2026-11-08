@@ -11,7 +11,9 @@ const check = (ok: boolean, message: string) => {
 };
 const read = (file: string) => readFileSync(file, "utf8");
 const digest = (file: string) =>
-  createHash("sha256").update(readFileSync(file)).digest("hex");
+  createHash("sha256")
+    .update(readFileSync(file, "utf8").replace(/\r\n/g, "\n"))
+    .digest("hex");
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     if (["node_modules", ".next", ".next-demo", "dist"].includes(e.name))

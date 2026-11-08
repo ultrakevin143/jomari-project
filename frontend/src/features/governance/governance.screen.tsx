@@ -1,6 +1,7 @@
 "use client";
 
 import { type Asset } from "@/features/governance/types";
+import { RetentionPreview } from "@/features/governance/retention-preview";
 import { api } from "@/shared/api/client";
 import { type Envelope, type Page, type User } from "@/shared/api/contracts";
 import {
@@ -235,6 +236,9 @@ export function GovernanceView({ user }: { user: User }) {
       >
         {selected && (
           <>
+            {user.permissions.includes("governance:write") && (
+              <RetentionPreview key={selected.id} assetId={selected.id} />
+            )}
             {editing ? (
               <form
                 onSubmit={async (e) => {

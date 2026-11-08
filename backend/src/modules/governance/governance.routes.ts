@@ -9,6 +9,11 @@ export function governanceRoutes(db: PrismaClient) {
   router.use(requirePermission("governance:read"));
   router.get("/domains", controller.getDomains);
   router.get("/assets", controller.getAssets);
+  router.get(
+    "/assets/:id/retention-preview",
+    requirePermission("governance:write"),
+    controller.getRetentionPreview,
+  );
   router.patch(
     "/assets/:id",
     requirePermission("governance:write"),
